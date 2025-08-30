@@ -1,3 +1,7 @@
 *.docx
 *.exe
 *.zip/
+*.xml
+*.rels
+*.bin
+*.emf
