@@ -6,23 +6,24 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
-
-	// "io"
 	"log"
 	"os"
+	"strings"
 )
 
 // type VObject struct {
 
 type EmbeddedObjectRefs struct {
-	emfID string
-	pdfID string
+	emfID   string
+	pdfID   string
 }
-
+type EmbeddedObjectPaths struct {
+	emfPath string
+	pdfPath string
+}
 const ADOBE_TYPE_PROG_ID = "Acrobat.Document.DC"
 
-func findEmbeddedObjects(documentXMLFile io.Reader) {
+func findEmbeddedObjects(documentXMLFile io.Reader) []EmbeddedObjectRefs {
 	documentDecoder := xml.NewDecoder(documentXMLFile)
 	var inObjectTag bool
 	var embeddedObjectRefs []EmbeddedObjectRefs
@@ -67,14 +68,66 @@ func findEmbeddedObjects(documentXMLFile io.Reader) {
 			if localName == "object" {
 				inObjectTag = false
 				if currentEmbeddedObject.pdfID != "" && currentEmbeddedObject.emfID != "" {
-					fmt.Printf("Found embedded PDF: %+v\n", currentEmbeddedObject)
 					embeddedObjectRefs = append(embeddedObjectRefs, currentEmbeddedObject)
 				}
 			}
 		}
 	}
+	return embeddedObjectRefs
 }
 
+// func findTitleInEmf(emfFile io.Reader) string {
+
+// }
+
+func getRelToPaths(relXMLFile io.Reader) map[string]string {
+	relToPathMap := make(map[string]string)
+	relationshipDecoder := xml.NewDecoder(relXMLFile)
+
+	for {
+		token, err := relationshipDecoder.Token()
+		if err != nil {
+			break
+		}
+		switch element := token.(type) {
+		case xml.StartElement:
+			var id, target string
+			for _, attr := range element.Attr {
+				if attr.Name.Local == "Id" {
+					id = attr.Value
+				} else if attr.Name.Local == "Target" {
+					if (strings.HasPrefix(attr.Value, "media/") || strings.HasPrefix(attr.Value, "embeddings/")) && (strings.HasSuffix(attr.Value, ".bin") || strings.HasSuffix(attr.Value, ".emf")) {
+						target = attr.Value
+					}
+				}
+			}
+			if id != "" && target != "" {
+				relToPathMap[id] = target
+			}
+		}
+	}
+	return relToPathMap
+}
+
+func getFileNameFromEmfPath(emfPath string) string {
+	emfFile , err := os.Open(emfPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer emfFile.Close()
+	// Get the last 300 bytes of the file
+	stat, err := file.Stat()
+    if err != nil {
+        return nil, err
+    }
+
+    fileSize := stat.Size()
+    if fileSize <= n {
+        // If file is smaller than n bytes, read entire file
+        return io.ReadAll(file)
+    }
+	return ""
+}
 
 func main() {
 	var verbose bool
@@ -106,6 +159,20 @@ func main() {
 	}
 	defer documentFile.Close()
 	log.Println("Successfully opened word/document.xml")
-	findEmbeddedObjects(documentFile)	
-
+	embeddedObjectRefs := findEmbeddedObjects(documentFile)
+	referencePathsFile, err := wordDirReader.Open("word/_rels/document.xml.rels")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer referencePathsFile.Close()
+	relToPathMap := getRelToPaths(referencePathsFile)
+	var embeddedObjectPaths []EmbeddedObjectPaths
+	for _, objRef := range embeddedObjectRefs {
+		emfPath, emfOk := relToPathMap[objRef.emfID]
+		pdfPath, pdfOk := relToPathMap[objRef.pdfID]
+		if emfOk && pdfOk {
+			embeddedObjectPaths = append(embeddedObjectPaths, EmbeddedObjectPaths{emfPath: emfPath, pdfPath: pdfPath})
+			fmt.Printf("Found embedded object paths: EMF: %s, PDF: %s\n", emfPath, pdfPath)
+		}
+	}
 }
