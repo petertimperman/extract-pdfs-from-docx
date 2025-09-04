@@ -40,3 +40,4 @@ go.work.sum
 *.emf
 *.png
 *.txt
+*.pdf

@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/xml"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
 	"github.com/IntelligenceX/fileconversion/ole2"
 )
 
@@ -191,8 +193,42 @@ func getRelToPaths(relXMLFile io.Reader) map[string]string {
 	return relToPathMap
 }
 
-func extractPdfBytesFromBinFile() [] byte {
-	
+func extractPdfBytesFromBinFile(binFileReader io.Reader) []byte  {
+
+	data, err := io.ReadAll(binFileReader)
+	if err != nil {
+		log.Fatal(err)
+	}
+	oleDoc, err := ole2.Open(bytes.NewReader(data), "utf-8" )
+	if err != nil {
+		log.Fatal(err)
+	}
+	streamNames, error := oleDoc.ListDir()
+	if error != nil {
+		log.Fatal(error)
+	}
+	var pdfContentStream *ole2.File
+	for _, stream := range streamNames {
+		if stream.Name() == "CONTENTS" {
+			pdfContentStream = stream
+			break
+		}
+	}
+	if pdfContentStream == nil {
+		fmt.Println("No CONTENTS stream found in the OLE file")
+		return nil
+	}
+	pdfSeeker := oleDoc.OpenFile(pdfContentStream , nil)	
+	pdfData, err := io.ReadAll(pdfSeeker)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pdfStart := bytes.Index(pdfData, []byte("%PDF-"))
+	if pdfStart == -1 {
+		fmt.Println("No PDF header found in the CONTENTS stream")
+		return nil
+	}
+	return pdfData 
 }
 
 func main() {
@@ -249,6 +285,30 @@ func main() {
 			title := findTitleInEmf(emfContentFile)
 			if title != "" {
 				fmt.Printf("Extracted title: %s\n", title)
+				binFile , err := wordDirReader.Open(pdfPath)
+				if err != nil {
+					log.Fatal(err)
+				}
+				defer binFile.Close()
+				pdfFileData := extractPdfBytesFromBinFile(binFile)
+				// Write the PDF data to a file named after the title
+				// Write to a directory named after the docx file appending _extracted
+				if pdfFileData != nil {
+					safeTitle := strings.Map(func(r rune) rune {
+						if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == ' ' || r == '.' {
+							return r
+						}
+						return '_'
+					}, title)
+					pdfFileName := safeTitle + ".pdf"
+					err = os.WriteFile(pdfFileName, pdfFileData, 0644)
+					if err != nil {
+						log.Fatal(err)
+					}
+					fmt.Printf("Extracted PDF file saved as: %s\n", pdfFileName)
+				} else {
+					fmt.Println("No PDF data extracted from the .bin file")
+				}
 			} 
 		}
 	}
