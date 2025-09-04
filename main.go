@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"github.com/IntelligenceX/fileconversion/ole2"
 )
 
 // type VObject struct {
@@ -190,25 +191,9 @@ func getRelToPaths(relXMLFile io.Reader) map[string]string {
 	return relToPathMap
 }
 
-// func getFileNameFromEmfPath(emfPath string) string {
-// 	emfFile , err := os.Open(emfPath)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
-// 	defer emfFile.Close()
-// 	// Get the last 300 bytes of the file
-// 	stat, err := file.Stat()
-//     if err != nil {
-//         return nil, err
-//     }
-
-//     fileSize := stat.Size()
-//     if fileSize <= n {
-//         // If file is smaller than n bytes, read entire file
-//         return io.ReadAll(file)
-//     }
-// 	return ""
-// }
+func extractPdfBytesFromBinFile() [] byte {
+	
+}
 
 func main() {
 	var verbose bool
